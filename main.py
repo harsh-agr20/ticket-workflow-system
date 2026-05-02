@@ -258,6 +258,16 @@ def dashboard():
         "developers": devs
     }
 
+# ---------------- CHAT SENDER ----------------
+def send_chat_message(text):
+    WEBHOOK_URL = "YOUR_WEBHOOK_URL"
+
+    payload = {"text": text}
+
+    requests.post(WEBHOOK_URL, json=payload)
+
+
+# ---------------- PROCESS ----------------
 def process_ticket(message_text):
     parsed = parse_message(message_text)
 
@@ -266,7 +276,7 @@ def process_ticket(message_text):
     eta = parsed.get("eta")
 
     if not all([client, issue, eta]):
-        send_chat_message("❌ Invalid format. Use: client=... issue=... eta=...")
+        send_chat_message("❌ Invalid format")
         return
 
     jira_response = create_jira_ticket(
@@ -279,7 +289,6 @@ def process_ticket(message_text):
     ticket_id = insert_ticket(client, issue, eta, jira_id)
     assignment = auto_assign_ticket(ticket_id)
 
-    # ✅ FINAL MESSAGE
     send_chat_message(
         f"✅ Ticket Created\nJIRA: {jira_id}\nDev: {assignment.get('dev_id')}"
     )
