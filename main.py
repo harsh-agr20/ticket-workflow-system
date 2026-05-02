@@ -170,7 +170,6 @@ async def chat_webhook(request: Request):
     return {
         "text": f"✅ Ticket Created\nJIRA: {jira_id}\nAssigned Dev: {dev_id}"
     }
-"""
 
 @app.post("/chat-webhook")
 async def chat_webhook(request: Request):
@@ -215,6 +214,50 @@ async def chat_webhook(request: Request):
 
     return {
         "text": f"✅ Ticket Created\nJIRA: {jira_id}\nAssigned Dev: {dev_id}"
+    }
+"""
+
+@app.post("/chat-webhook")
+async def chat_webhook(request: Request):
+    body = await request.json()
+
+    print("GOOGLE CHAT PAYLOAD:", body)
+
+    # Extract message
+    message_obj = body.get("message", {})
+    message_text = message_obj.get("text", "")
+
+    if not message_text:
+        return {"text": "No message received"}
+
+    parsed = parse_message(message_text)
+
+    client = parsed.get("client")
+    issue = parsed.get("issue")
+    eta = parsed.get("eta")
+
+    if not all([client, issue, eta]):
+        return {
+            "text": "Format: client=... issue=... eta=..."
+        }
+
+    # Create ticket
+    jira_response = create_jira_ticket(
+        summary=f"{client}: {issue}",
+        description=f"Issue: {issue}, ETA: {eta}"
+    )
+
+    jira_id = jira_response.get("key")
+
+    ticket_id = insert_ticket(client, issue, eta, jira_id)
+    assignment = auto_assign_ticket(ticket_id)
+
+    # 🔥 VERY IMPORTANT PART
+    return {
+        "text": f"✅ Ticket Created\nJIRA: {jira_id}\nDev: {assignment.get('dev_id')}",
+        "thread": {
+            "name": message_obj.get("thread", {}).get("name")
+        }
     }
 
 # ---------------- ASSIGN ----------------
