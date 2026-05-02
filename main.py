@@ -103,35 +103,6 @@ def parse_message(message: str):
 # ---------------- CHAT WEBHOOK ----------
 
 from fastapi import Request
-"""
-@app.post("/chat-webhook")
-async def chat_webhook(request: Request):
-    body = await request.json()
-
-    print("GOOGLE CHAT PAYLOAD:", body)
-
-    message_text = (
-        body.get("message", {}).get("text")
-        or body.get("text")
-        or ""
-    )
-
-    if not message_text:
-        return {"text": "❌ No message received"}
-
-    # 🔥 background me ticket process hoga
-    threading.Thread(target=process_ticket, args=(message_text,)).start()
-
-    # ⚡ instant reply
-    return {
-        "text": "⏳ Creating ticket..."
-    }
-
-
-@app.post("/chat-webhook")
-async def chat_webhook(request: Request):
-    return {"text": "🔥 BOT HIT SUCCESS"}
-
 
 @app.post("/chat-webhook")
 async def chat_webhook(request: Request):
@@ -139,92 +110,9 @@ async def chat_webhook(request: Request):
 
     print("GOOGLE CHAT PAYLOAD:", body)
 
-    message_text = body.get("message", {}).get("text", "")
+    # ✅ CORRECT PATH
+    message_obj = body.get("chat", {}).get("messagePayload", {}).get("message", {})
 
-    if not message_text:
-        return {"text": "No message received"}
-
-    parsed = parse_message(message_text)
-
-    client = parsed.get("client")
-    issue = parsed.get("issue")
-    eta = parsed.get("eta")
-
-    if not all([client, issue, eta]):
-        return {
-            "text": "Format: client=... issue=... eta=..."
-        }
-
-    jira_response = create_jira_ticket(
-        summary=f"{client}: {issue}",
-        description=f"Issue: {issue}, ETA: {eta}"
-    )
-
-    jira_id = jira_response.get("key")
-
-    ticket_id = insert_ticket(client, issue, eta, jira_id)
-    assignment = auto_assign_ticket(ticket_id)
-
-    dev_id = assignment.get("dev_id")
-
-    return {
-        "text": f"✅ Ticket Created\nJIRA: {jira_id}\nAssigned Dev: {dev_id}"
-    }
-
-@app.post("/chat-webhook")
-async def chat_webhook(request: Request):
-    body = await request.json()
-
-    print("GOOGLE CHAT PAYLOAD:", body)
-
-    # ✅ CASE 1: BOT ADDED TO SPACE
-    if "addedToSpacePayload" in body.get("chat", {}):
-        return {
-            "text": "🤖 Ticket Bot Activated!\nSend: client=... issue=... eta=..."
-        }
-
-    # ✅ CASE 2: NORMAL MESSAGE
-    message_text = body.get("message", {}).get("text", "")
-
-    if not message_text:
-        return {"text": "No message received"}
-
-    parsed = parse_message(message_text)
-
-    client = parsed.get("client")
-    issue = parsed.get("issue")
-    eta = parsed.get("eta")
-
-    if not all([client, issue, eta]):
-        return {
-            "text": "Format: client=... issue=... eta=..."
-        }
-
-    jira_response = create_jira_ticket(
-        summary=f"{client}: {issue}",
-        description=f"Issue: {issue}, ETA: {eta}"
-    )
-
-    jira_id = jira_response.get("key")
-
-    ticket_id = insert_ticket(client, issue, eta, jira_id)
-    assignment = auto_assign_ticket(ticket_id)
-
-    dev_id = assignment.get("dev_id")
-
-    return {
-        "text": f"✅ Ticket Created\nJIRA: {jira_id}\nAssigned Dev: {dev_id}"
-    }
-"""
-
-@app.post("/chat-webhook")
-async def chat_webhook(request: Request):
-    body = await request.json()
-
-    print("GOOGLE CHAT PAYLOAD:", body)
-
-    # Extract message
-    message_obj = body.get("message", {})
     message_text = message_obj.get("text", "")
 
     if not message_text:
@@ -241,7 +129,7 @@ async def chat_webhook(request: Request):
             "text": "Format: client=... issue=... eta=..."
         }
 
-    # Create ticket
+    # 🎯 Ticket creation
     jira_response = create_jira_ticket(
         summary=f"{client}: {issue}",
         description=f"Issue: {issue}, ETA: {eta}"
@@ -252,13 +140,14 @@ async def chat_webhook(request: Request):
     ticket_id = insert_ticket(client, issue, eta, jira_id)
     assignment = auto_assign_ticket(ticket_id)
 
-    # 🔥 VERY IMPORTANT PART
+    # ✅ IMPORTANT: thread response
     return {
         "text": f"✅ Ticket Created\nJIRA: {jira_id}\nDev: {assignment.get('dev_id')}",
         "thread": {
             "name": message_obj.get("thread", {}).get("name")
         }
     }
+
 
 # ---------------- ASSIGN ----------------
 @app.post("/assign-ticket/{ticket_id}")
@@ -389,36 +278,3 @@ def dashboard():
         "developers": devs
     }
 
-
-# ---------------- CHAT SENDER ----------------
-def send_chat_message(text):
-    WEBHOOK_URL = "https://chat.googleapis.com/v1/spaces/AAQA3VIzjzw/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=L50yQPPgo976zZm77mStypfjsi0_LwG2mitPwguX1jc"
-
-    payload = {"text": text}
-
-    requests.post(WEBHOOK_URL, json=payload)
-
-def process_ticket(message_text):
-    parsed = parse_message(message_text)
-
-    client = parsed.get("client")
-    issue = parsed.get("issue")
-    eta = parsed.get("eta")
-
-    if not all([client, issue, eta]):
-        send_chat_message("❌ Invalid format. Use: client=... issue=... eta=...")
-        return
-
-    jira_response = create_jira_ticket(
-        summary=f"{client}: {issue}",
-        description=f"Issue: {issue}, ETA: {eta}"
-    )
-
-    jira_id = jira_response.get("key")
-
-    ticket_id = insert_ticket(client, issue, eta, jira_id)
-    assignment = auto_assign_ticket(ticket_id)
-
-    send_chat_message(
-        f"✅ Ticket Created\nJIRA: {jira_id}\nDev: {assignment.get('dev_id')}"
-    )
