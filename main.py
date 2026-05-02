@@ -103,7 +103,7 @@ def parse_message(message: str):
 # ---------------- CHAT WEBHOOK ----------
 
 from fastapi import Request
-<#
+"""
 @app.post("/chat-webhook")
 async def chat_webhook(request: Request):
     body = await request.json()
@@ -126,7 +126,7 @@ async def chat_webhook(request: Request):
     return {
         "text": "⏳ Creating ticket..."
     }
-#>
+"""
 
 @app.post("/chat-webhook")
 async def chat_webhook(request: Request):
