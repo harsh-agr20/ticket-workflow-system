@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from requests.auth import HTTPBasicAuth
 from fastapi import FastAPI
 from pydantic import BaseModel
-import threading
+
 from database import insert_ticket, init_db, free_developer
 from services.assignment_service import auto_assign_ticket, process_queue
 
@@ -119,13 +119,31 @@ async def chat_webhook(request: Request):
     if not message_text:
         return {"text": "❌ No message received"}
 
-    # 🔥 background me ticket process hoga
-    threading.Thread(target=process_ticket, args=(message_text,)).start()
+    parsed = parse_message(message_text)
 
-    # ⚡ instant reply
+    client = parsed.get("client")
+    issue = parsed.get("issue")
+    eta = parsed.get("eta")
+
+    if not all([client, issue, eta]):
+        return {
+            "text": "❌ Format: client=... issue=... eta=..."
+        }
+
+    jira_response = create_jira_ticket(
+        summary=f"{client}: {issue}",
+        description=f"Issue: {issue}, ETA: {eta}"
+    )
+
+    jira_id = jira_response.get("key")
+
+    ticket_id = insert_ticket(client, issue, eta, jira_id)
+    assignment = auto_assign_ticket(ticket_id)
+
     return {
-        "text": "⏳ Creating ticket..."
+        "text": f"✅ Ticket Created\nJIRA: {jira_id}\nDev: {assignment.get('dev_id')}"
     }
+
 
 # ---------------- ASSIGN ----------------
 @app.post("/assign-ticket/{ticket_id}")
@@ -264,28 +282,3 @@ def send_chat_message(text):
     payload = {"text": text}
 
     requests.post(WEBHOOK_URL, json=payload)
-
-def process_ticket(message_text):
-    parsed = parse_message(message_text)
-
-    client = parsed.get("client")
-    issue = parsed.get("issue")
-    eta = parsed.get("eta")
-
-    if not all([client, issue, eta]):
-        send_chat_message("❌ Invalid format. Use: client=... issue=... eta=...")
-        return
-
-    jira_response = create_jira_ticket(
-        summary=f"{client}: {issue}",
-        description=f"Issue: {issue}, ETA: {eta}"
-    )
-
-    jira_id = jira_response.get("key")
-
-    ticket_id = insert_ticket(client, issue, eta, jira_id)
-    assignment = auto_assign_ticket(ticket_id)
-
-    send_chat_message(
-        f"✅ Ticket Created\nJIRA: {jira_id}\nDev: {assignment.get('dev_id')}"
-    )
