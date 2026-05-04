@@ -2,14 +2,13 @@ import os
 import requests
 from dotenv import load_dotenv
 from requests.auth import HTTPBasicAuth
-from fastapi import FastAPI
-from pydantic import BaseModel
-import threading
-from database import insert_ticket, init_db, free_developer
-from services.assignment_service import auto_assign_ticket, process_queue
+from fastapi import FastAPI, Request
+from database import insert_ticket, init_db
+from services.assignment_service import auto_assign_ticket
 
 load_dotenv()
 
+# ---------------- ENV ----------------
 JIRA_BASE_URL = os.getenv("JIRA_BASE_URL")
 JIRA_EMAIL = os.getenv("JIRA_EMAIL")
 JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN")
@@ -17,29 +16,19 @@ JIRA_PROJECT_KEY = os.getenv("JIRA_PROJECT_KEY")
 
 app = FastAPI()
 
-
 # ---------------- INIT ----------------
 @app.on_event("startup")
 def startup():
     init_db()
-
 
 # ---------------- BASIC ROUTES ----------------
 @app.get("/")
 def home():
     return {"message": "Server is running"}
 
-
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
-
-@app.get("/test-jira")
-def test_jira():
-    result = create_jira_ticket("Test API Ticket", "Created from FastAPI")
-    return result
-
 
 # ---------------- JIRA ----------------
 def create_jira_ticket(summary, description):
@@ -77,17 +66,12 @@ def create_jira_ticket(summary, description):
 
     response = requests.post(url, json=payload, headers=headers, auth=auth)
 
-    print(response.status_code)
-    print(response.text)
+    print("JIRA STATUS:", response.status_code)
+    print("JIRA RESPONSE:", response.text)
 
     return response.json()
 
-
 # ---------------- PARSER ----------------
-class ChatRequest(BaseModel):
-    message: str
-
-
 def parse_message(message: str):
     parts = message.split()
     data = {}
@@ -99,176 +83,24 @@ def parse_message(message: str):
 
     return data
 
-
-# ---------------- CHAT WEBHOOK ----------
-
-from fastapi import Request
-
+# ---------------- CHAT WEBHOOK ----------------
 @app.post("/chat-webhook")
 async def chat_webhook(request: Request):
     body = await request.json()
 
     print("GOOGLE CHAT PAYLOAD:", body)
 
-    message_obj = body.get("chat", {}).get("messagePayload", {}).get("message", {})
-    message_text = message_obj.get("text", "")
+    chat_data = body.get("chat", {})
+
+    # ÃÂ¢ FIXED MESSAGE PARSING
+    message_text = (
+        chat_data.get("message", {}).get("text")
+        or chat_data.get("messagePayload", {}).get("message", {}).get("text")
+    )
 
     if not message_text:
-        return {"text": "No message received"}
+        return {"text": "ÃÂ¢ No message received"}
 
-    # 🚀 BACKGROUND THREAD
-    import threading
-    threading.Thread(target=process_ticket, args=(message_text,)).start()
-
-    # ⚡ INSTANT RESPONSE (IMPORTANT)
-    return {
-        "text": "⏳ Creating ticket...",
-        "thread": {
-            "name": message_obj.get("thread", {}).get("name")
-        }
-    }
-
-
-# ---------------- ASSIGN ----------------
-@app.post("/assign-ticket/{ticket_id}")
-def assign_ticket(ticket_id: int):
-    import sqlite3
-
-    conn = sqlite3.connect("tickets.db")
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        UPDATE tickets
-        SET status = 'ASSIGNED',
-            assigned_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-    """, (ticket_id,))
-
-    conn.commit()
-    conn.close()
-
-    return {"message": "Ticket assigned"}
-
-
-# ---------------- COMPLETE ----------------
-@app.post("/complete-ticket/{ticket_id}")
-def complete_ticket(ticket_id: int):
-    import sqlite3
-
-    conn = sqlite3.connect("tickets.db")
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        UPDATE tickets
-        SET status = 'COMPLETED',
-            completed_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-    """, (ticket_id,))
-
-    conn.commit()
-    conn.close()
-
-    free_developer(ticket_id)
-    result = process_queue()
-
-    return {
-        "message": "Ticket completed",
-        "next_assignment": result
-    }
-
-
-# ---------------- RATING ----------------
-def calculate_rating(created_at, completed_at, eta):
-    from datetime import datetime
-
-    fmt = "%Y-%m-%d %H:%M:%S"
-
-    created = datetime.strptime(created_at, fmt)
-    completed = datetime.strptime(completed_at, fmt)
-
-    actual_time = (completed - created).total_seconds() / 3600
-    eta_hours = float(eta.replace("d", "")) * 24
-
-    if actual_time <= eta_hours:
-        return 5
-    elif actual_time <= eta_hours * 1.5:
-        return 3
-    else:
-        return 1
-
-
-# ---------------- ANALYTICS ----------------
-@app.get("/analytics")
-def analytics():
-    import sqlite3
-
-    conn = sqlite3.connect("tickets.db")
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT created_at, completed_at, eta
-        FROM tickets
-        WHERE status = 'COMPLETED'
-    """)
-
-    data = cursor.fetchall()
-
-    ratings = []
-
-    for row in data:
-        created, completed, eta = row
-        ratings.append(calculate_rating(created, completed, eta))
-
-    return {
-        "total_completed": len(ratings),
-        "ratings": ratings,
-        "avg_rating": sum(ratings)/len(ratings) if ratings else 0
-    }
-
-
-# ---------------- TICKETS ----------------
-@app.get("/tickets")
-def get_tickets():
-    import sqlite3
-
-    conn = sqlite3.connect("tickets.db")
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM tickets")
-
-    return {"data": cursor.fetchall()}
-
-
-# ---------------- DASHBOARD ----------------
-@app.get("/dashboard")
-def dashboard():
-    import sqlite3
-
-    conn = sqlite3.connect("tickets.db")
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT status, COUNT(*) FROM tickets GROUP BY status")
-    ticket_stats = cursor.fetchall()
-
-    cursor.execute("SELECT name, status FROM developers")
-    devs = cursor.fetchall()
-
-    return {
-        "tickets": ticket_stats,
-        "developers": devs
-    }
-
-# ---------------- CHAT SENDER ----------------
-def send_chat_message(text):
-    WEBHOOK_URL = "YOUR_WEBHOOK_URL"
-
-    payload = {"text": text}
-
-    requests.post(WEBHOOK_URL, json=payload)
-
-
-# ---------------- PROCESS ----------------
-def process_ticket(message_text):
     parsed = parse_message(message_text)
 
     client = parsed.get("client")
@@ -276,19 +108,52 @@ def process_ticket(message_text):
     eta = parsed.get("eta")
 
     if not all([client, issue, eta]):
-        send_chat_message("❌ Invalid format")
-        return
+        return {"text": "ÃÂ¢ÃÂ ÃÂ¯ÃÂ¸ Format: client=... issue=... eta=..."}
 
     jira_response = create_jira_ticket(
         summary=f"{client}: {issue}",
         description=f"Issue: {issue}, ETA: {eta}"
     )
 
-    jira_id = jira_response.get("key")
+    jira_id = jira_response.get("key", "N/A")
 
     ticket_id = insert_ticket(client, issue, eta, jira_id)
     assignment = auto_assign_ticket(ticket_id)
 
-    send_chat_message(
-        f"✅ Ticket Created\nJIRA: {jira_id}\nDev: {assignment.get('dev_id')}"
+    dev_id = assignment.get("dev_id")
+
+    # ÃÂ¢ FIXED THREAD HANDLING
+    thread_name = (
+        chat_data.get("message", {}).get("thread", {}).get("name")
+        or chat_data.get("messagePayload", {}).get("message", {}).get("thread", {}).get("name")
     )
+
+    response = {
+        "cardsV2": [
+            {
+                "cardId": "ticket_card",
+                "card": {
+                    "sections": [
+                        {
+                            "widgets": [
+                                {
+                                    "textParagraph": {
+                                        "text": f"<b>Ticket Created</b><br>JIRA: {jira_id}<br>Assigned Dev: {dev_id}"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+     ]
+    }
+
+    # thread add karo (important)
+    if thread_name:
+        response["thread"] = {"name": thread_name}
+    
+    return response
+
+
+

@@ -3,6 +3,7 @@ import requests
 from dotenv import load_dotenv
 from requests.auth import HTTPBasicAuth
 from fastapi import FastAPI, Request
+
 from database import insert_ticket, init_db
 from services.assignment_service import auto_assign_ticket
 
@@ -92,14 +93,15 @@ async def chat_webhook(request: Request):
 
     chat_data = body.get("chat", {})
 
-    # ÃÂ¢ FIXED MESSAGE PARSING
+    # ✅ IMPORTANT FIX: argumentText use karo (mentions handle karega)
     message_text = (
-        chat_data.get("message", {}).get("text")
+        chat_data.get("message", {}).get("argumentText")
+        or chat_data.get("messagePayload", {}).get("message", {}).get("argumentText")
         or chat_data.get("messagePayload", {}).get("message", {}).get("text")
     )
 
     if not message_text:
-        return {"text": "ÃÂ¢ No message received"}
+        return {"text": "❌ No message received"}
 
     parsed = parse_message(message_text)
 
@@ -108,8 +110,9 @@ async def chat_webhook(request: Request):
     eta = parsed.get("eta")
 
     if not all([client, issue, eta]):
-        return {"text": "ÃÂ¢ÃÂ ÃÂ¯ÃÂ¸ Format: client=... issue=... eta=..."}
+        return {"text": "⚠️ Format: client=... issue=... eta=..."}
 
+    # ✅ Create Jira Ticket
     jira_response = create_jira_ticket(
         summary=f"{client}: {issue}",
         description=f"Issue: {issue}, ETA: {eta}"
@@ -117,18 +120,21 @@ async def chat_webhook(request: Request):
 
     jira_id = jira_response.get("key", "N/A")
 
+    # ✅ Save + Assign
     ticket_id = insert_ticket(client, issue, eta, jira_id)
     assignment = auto_assign_ticket(ticket_id)
 
     dev_id = assignment.get("dev_id")
 
-    # ÃÂ¢ FIXED THREAD HANDLING
+    # ✅ THREAD HANDLE (important for reply)
     thread_name = (
         chat_data.get("message", {}).get("thread", {}).get("name")
         or chat_data.get("messagePayload", {}).get("message", {}).get("thread", {}).get("name")
     )
 
+    # ✅ FINAL RESPONSE (text + card)
     response = {
+        "text": f"Ticket Created: {jira_id}",
         "cardsV2": [
             {
                 "cardId": "ticket_card",
@@ -138,7 +144,7 @@ async def chat_webhook(request: Request):
                             "widgets": [
                                 {
                                     "textParagraph": {
-                                        "text": f"<b>Ticket Created</b><br>JIRA: {jira_id}<br>Assigned Dev: {dev_id}"
+                                        "text": f"✅ <b>Ticket Created</b><br>JIRA: {jira_id}<br>Assigned Dev: {dev_id}"
                                     }
                                 }
                             ]
@@ -146,14 +152,12 @@ async def chat_webhook(request: Request):
                     ]
                 }
             }
-     ]
+        ]
     }
 
-    # thread add karo (important)
     if thread_name:
         response["thread"] = {"name": thread_name}
-    
+
+    print("FINAL RESPONSE:", response)
+
     return response
-
-
-
