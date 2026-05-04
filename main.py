@@ -90,22 +90,12 @@ async def chat_webhook(request: Request):
 
     print("GOOGLE CHAT PAYLOAD:", body)
 
-    chat_data = body.get("chat", {})
-
-    # ---------------- MESSAGE EXTRACT ----------------
-    message_text = chat_data.get("message", {}).get("text")
-
-    if not message_text:
-        message_text = (
-            chat_data.get("messagePayload", {})
-            .get("message", {})
-            .get("text")
-        )
+    # ✅ FIXED PARSING
+    message_text = body.get("message", {}).get("text")
 
     if not message_text:
         return {"text": "❌ No message received"}
 
-    # ---------------- PARSE ----------------
     parsed = parse_message(message_text)
 
     client = parsed.get("client")
@@ -113,11 +103,8 @@ async def chat_webhook(request: Request):
     eta = parsed.get("eta")
 
     if not all([client, issue, eta]):
-        return {
-            "text": "⚠️ Format: client=... issue=... eta=..."
-        }
+        return {"text": "⚠️ Format: client=... issue=... eta=..."}
 
-    # ---------------- CREATE TICKET ----------------
     jira_response = create_jira_ticket(
         summary=f"{client}: {issue}",
         description=f"Issue: {issue}, ETA: {eta}"
@@ -130,14 +117,6 @@ async def chat_webhook(request: Request):
 
     dev_id = assignment.get("dev_id")
 
-    # ---------------- THREAD HANDLING ----------------
-    thread_name = (
-        chat_data.get("message", {}).get("thread", {}).get("name")
-        or chat_data.get("messagePayload", {}).get("message", {}).get("thread", {}).get("name")
-    )
-
-    # ---------------- FINAL RESPONSE ----------------
     return {
-        "text": f"✅ Ticket Created\nJIRA: {jira_id}\nAssigned Dev: {dev_id}",
-        "thread": {"name": thread_name}
+        "text": f"✅ Ticket Created\nJIRA: {jira_id}\nAssigned Dev: {dev_id}"
     }
