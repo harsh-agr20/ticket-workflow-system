@@ -92,14 +92,14 @@ async def chat_webhook(request: Request):
 
     chat_data = body.get("chat", {})
 
-    # ✅ FIXED MESSAGE PARSING
+    # â FIXED MESSAGE PARSING
     message_text = (
         chat_data.get("message", {}).get("text")
         or chat_data.get("messagePayload", {}).get("message", {}).get("text")
     )
 
     if not message_text:
-        return {"text": "❌ No message received"}
+        return {"text": "â No message received"}
 
     parsed = parse_message(message_text)
 
@@ -108,7 +108,7 @@ async def chat_webhook(request: Request):
     eta = parsed.get("eta")
 
     if not all([client, issue, eta]):
-        return {"text": "⚠️ Format: client=... issue=... eta=..."}
+        return {"text": "â ï¸ Format: client=... issue=... eta=..."}
 
     jira_response = create_jira_ticket(
         summary=f"{client}: {issue}",
@@ -122,7 +122,7 @@ async def chat_webhook(request: Request):
 
     dev_id = assignment.get("dev_id")
 
-    # ✅ FIXED THREAD HANDLING
+    # â FIXED THREAD HANDLING
     thread_name = (
         chat_data.get("message", {}).get("thread", {}).get("name")
         or chat_data.get("messagePayload", {}).get("message", {}).get("thread", {}).get("name")
@@ -154,3 +154,4 @@ async def chat_webhook(request: Request):
         response["thread"] = {"name": thread_name}
     
     return response
+
