@@ -129,10 +129,28 @@ async def chat_webhook(request: Request):
     )
 
     response = {
-        "text": f"✅ Ticket Created\nJIRA: {jira_id}\nAssigned Dev: {dev_id}"
+        "cardsV2": [
+            {
+                "cardId": "ticket_card",
+                "card": {
+                    "sections": [
+                        {
+                            "widgets": [
+                                {
+                                    "textParagraph": {
+                                        "text": f"<b>Ticket Created</b><br>JIRA: {jira_id}<br>Assigned Dev: {dev_id}"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+     ]
     }
 
+    # thread add karo (important)
     if thread_name:
         response["thread"] = {"name": thread_name}
-
+    
     return response
