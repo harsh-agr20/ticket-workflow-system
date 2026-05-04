@@ -1,4 +1,3 @@
-import os
 import requests
 from dotenv import load_dotenv
 from requests.auth import HTTPBasicAuth
@@ -93,7 +92,7 @@ async def chat_webhook(request: Request):
 
     chat_data = body.get("chat", {})
 
-    # â IMPORTANT FIX: argumentText use karo (mentions handle karega)
+    # Ã¢ IMPORTANT FIX: argumentText use karo (mentions handle karega)
     message_text = (
         chat_data.get("message", {}).get("argumentText")
         or chat_data.get("messagePayload", {}).get("message", {}).get("argumentText")
@@ -101,7 +100,7 @@ async def chat_webhook(request: Request):
     )
 
     if not message_text:
-        return {"text": "â No message received"}
+        return {"text": "Ã¢ No message received"}
 
     parsed = parse_message(message_text)
 
@@ -110,9 +109,9 @@ async def chat_webhook(request: Request):
     eta = parsed.get("eta")
 
     if not all([client, issue, eta]):
-        return {"text": "â ï¸ Format: client=... issue=... eta=..."}
+        return {"text": "Ã¢Â Ã¯Â¸ Format: client=... issue=... eta=..."}
 
-    # â Create Jira Ticket
+    # Ã¢ Create Jira Ticket
     jira_response = create_jira_ticket(
         summary=f"{client}: {issue}",
         description=f"Issue: {issue}, ETA: {eta}"
@@ -120,19 +119,19 @@ async def chat_webhook(request: Request):
 
     jira_id = jira_response.get("key", "N/A")
 
-    # â Save + Assign
+    # Ã¢ Save + Assign
     ticket_id = insert_ticket(client, issue, eta, jira_id)
     assignment = auto_assign_ticket(ticket_id)
 
     dev_id = assignment.get("dev_id")
 
-    # â THREAD HANDLE (important for reply)
+    # Ã¢ THREAD HANDLE (important for reply)
     thread_name = (
         chat_data.get("message", {}).get("thread", {}).get("name")
         or chat_data.get("messagePayload", {}).get("message", {}).get("thread", {}).get("name")
     )
 
-    # â FINAL RESPONSE (text + card)
+    # Ã¢ FINAL RESPONSE (text + card)
     response = {
         "text": f"Ticket Created: {jira_id}",
         "cardsV2": [
@@ -144,7 +143,7 @@ async def chat_webhook(request: Request):
                             "widgets": [
                                 {
                                     "textParagraph": {
-                                        "text": f"â <b>Ticket Created</b><br>JIRA: {jira_id}<br>Assigned Dev: {dev_id}"
+                                        "text": f"Ã¢ <b>Ticket Created</b><br>JIRA: {jira_id}<br>Assigned Dev: {dev_id}"
                                     }
                                 }
                             ]
@@ -174,4 +173,5 @@ def send_chat_message(text):
         print("CHAT WEBHOOK STATUS:", response.status_code)
     except Exception as e:
         print("CHAT SEND ERROR:", e)
+
 
