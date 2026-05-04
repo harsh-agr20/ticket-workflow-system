@@ -85,6 +85,7 @@ def parse_message(message: str):
     return data
 
 # ---------------- CHAT WEBHOOK ----------------
+# ---------------- CHAT WEBHOOK ----------------
 @app.post("/chat-webhook")
 async def chat_webhook(request: Request):
     body = await request.json()
@@ -93,7 +94,7 @@ async def chat_webhook(request: Request):
 
     chat_data = body.get("chat", {})
 
-    # ÃÂ¢ IMPORTANT FIX: argumentText use karo (mentions handle karega)
+    # ✅ argumentText (mentions handle karega)
     message_text = (
         chat_data.get("message", {}).get("argumentText")
         or chat_data.get("messagePayload", {}).get("message", {}).get("argumentText")
@@ -101,7 +102,7 @@ async def chat_webhook(request: Request):
     )
 
     if not message_text:
-        return {"text": "ÃÂ¢ No message received"}
+        return {"text": "No message received"}
 
     parsed = parse_message(message_text)
 
@@ -110,9 +111,9 @@ async def chat_webhook(request: Request):
     eta = parsed.get("eta")
 
     if not all([client, issue, eta]):
-        return {"text": "ÃÂ¢ÃÂ ÃÂ¯ÃÂ¸ Format: client=... issue=... eta=..."}
+        return {"text": "Format: client=... issue=... eta=..."}
 
-    # ÃÂ¢ Create Jira Ticket
+    # ✅ Create Jira Ticket
     jira_response = create_jira_ticket(
         summary=f"{client}: {issue}",
         description=f"Issue: {issue}, ETA: {eta}"
@@ -120,47 +121,29 @@ async def chat_webhook(request: Request):
 
     jira_id = jira_response.get("key", "N/A")
 
-    # ÃÂ¢ Save + Assign
+    # ✅ Save + Assign
     ticket_id = insert_ticket(client, issue, eta, jira_id)
     assignment = auto_assign_ticket(ticket_id)
 
     dev_id = assignment.get("dev_id")
 
-    # ÃÂ¢ THREAD HANDLE (important for reply)
-    thread_name = (
-        chat_data.get("message", {}).get("thread", {}).get("name")
-        or chat_data.get("messagePayload", {}).get("message", {}).get("thread", {}).get("name")
-    )
+    # ✅ MESSAGE (clean — no weird symbols)
+    message = f"""
+Ticket Created ✅
+JIRA: {jira_id}
+Assigned Dev: {dev_id}
+Client: {client}
+Issue: {issue}
+ETA: {eta}
+"""
 
-    # ÃÂ¢ FINAL RESPONSE (text + card)
-    response = {
-        "text": f"Ticket Created: {jira_id}",
-        "cardsV2": [
-            {
-                "cardId": "ticket_card",
-                "card": {
-                    "sections": [
-                        {
-                            "widgets": [
-                                {
-                                    "textParagraph": {
-                                        "text": f"ÃÂ¢ <b>Ticket Created</b><br>JIRA: {jira_id}<br>Assigned Dev: {dev_id}"
-                                    }
-                                }
-                            ]
-                        }
-                    ]
-                }
-            }
-        ]
+    # ✅ IMPORTANT: Send via webhook (THIS FIXES YOUR ISSUE)
+    send_chat_message(message)
+
+    # ✅ Return simple response (avoid cards/thread issues)
+    return {
+        "text": f"Ticket Created: {jira_id}"
     }
-
-    if thread_name:
-        response["thread"] = {"name": thread_name}
-
-    print("FINAL RESPONSE:", response)
-
-    return response
 
 def send_chat_message(text):
     webhook_url = os.getenv("CHAT_WEBHOOK_URL")
@@ -172,8 +155,6 @@ def send_chat_message(text):
     try:
         response = requests.post(webhook_url, json=payload)
         print("CHAT WEBHOOK STATUS:", response.status_code)
+        print("CHAT WEBHOOK RESPONSE:", response.text)
     except Exception as e:
         print("CHAT SEND ERROR:", e)
-
-
-
